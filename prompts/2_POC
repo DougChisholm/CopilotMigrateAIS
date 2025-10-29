@@ -1,1 +1,5 @@
-Update the plan to include a Proof of Concept step, which you will help build using the existing Integration files we have (in this case the Boomi files and settings found in the bpr folder). Create sub issues for each step you take then assign yourself to each sub issue in turn to add any infrastructure as code and executable code needed to fulfil the POC aspect. Abstract away any keys or tokens needed so they can be separated using environment variables or equivalent. If you need more information or any files or setting values, please add a sub-issue listing what you need.
+Update the plan to include a Proof of Concept (POC) step, which you will help build using the existing Integration files we have (in this case the Boomi files and settings found in the bpr folder).
+For the POC we will use lower cost/scale components such as Development SKUs and Serverless/Consumption services to keep costs low. PLease reflect this in any pricing as a table with POC and PROD columns.
+Create sub issues for each step you take then assign yourself to each sub issue in turn to add any infrastructure as code and executable code needed to fulfil the POC aspect. 
+Abstract away any keys or tokens needed so they can be separated using environment variables or equivalent. 
+If you need more information or any files or setting values, please add a sub-issue listing what you need.
