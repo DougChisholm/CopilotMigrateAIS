@@ -1,0 +1,1 @@
+Create a plan to migrate a systems integration current built in Boomi over to Azure Integration services architecture. Use the specifications and sizing found in the specifications folder. Include the steps you would expect a team to perform and the mount of time it might take for a single simple integration between two systems. Add this plan to the repository.
