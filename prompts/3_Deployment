@@ -1,1 +1,1 @@
-Create a DEPLOY.md file explaining how to deploy it to azure and include a deploy button that will actually deploy it safely to a sandbox environment. 
+Add Bicep files to the repo that can be used to deploy the solution to Azure. Also create a DEPLOY.md file explaining how to deploy it to azure and include a deploy button that will actually deploy it safely to a sandbox environment. 
