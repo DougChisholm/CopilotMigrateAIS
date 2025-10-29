@@ -1,1 +1,463 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Sample Boomi Process: SQL Server to Oracle Database Integration -->
+<!-- This represents a database-to-database integration with data transformation -->
+<process xmlns="http://www.boomi.com/schema/process" version="1.0">
+  <processId>sql-server-oracle-customer-sync-v1</processId>
+  <processName>SQL Server to Oracle Customer Sync</processName>
+  <description>
+    Database integration process that synchronizes customer records from SQL Server to Oracle:
+    1. Query SQL Server for new/updated customer records
+    2. Transform data structure and combine firstname/lastname into fullname
+    3. Map customer fields to Oracle schema
+    4. Insert/Update records in Oracle database
+    5. Handle errors and maintain data integrity
+    6. Log successful transfers for audit trail
+  </description>
 
+  <!-- Process Configuration -->
+  <processConfiguration>
+    <environment>production</environment>
+    <runtimeEngine>atom</runtimeEngine>
+    <schedulingType>scheduled</schedulingType>
+    <schedule>
+      <frequency>hourly</frequency>
+      <startTime>08:00</startTime>
+      <endTime>18:00</endTime>
+      <timezone>UTC</timezone>
+    </schedule>
+    <errorHandling>
+      <onError>stop</onError>
+      <maxRetries>5</maxRetries>
+      <retryInterval>60</retryInterval>
+    </errorHandling>
+    <batchSize>1000</batchSize>
+  </processConfiguration>
+
+  <!-- Connectors -->
+  <connectors>
+    <connector id="sql-server-source" type="DATABASE">
+      <name>SQL Server Source Database</name>
+      <configuration>
+        <connectionType>SQL_SERVER</connectionType>
+        <server>sqlserver-prod.company.com</server>
+        <database>CRM_Database</database>
+        <port>1433</port>
+        <authentication>
+          <type>SQL_AUTH</type>
+          <username>${sql_username}</username>
+          <password>${sql_password}</password>
+        </authentication>
+        <connectionPool>
+          <maxConnections>10</maxConnections>
+          <minConnections>2</minConnections>
+          <connectionTimeout>30</connectionTimeout>
+        </connectionPool>
+        <queryTimeout>300</queryTimeout>
+      </configuration>
+    </connector>
+
+    <connector id="oracle-destination" type="DATABASE">
+      <name>Oracle Destination Database</name>
+      <configuration>
+        <connectionType>ORACLE</connectionType>
+        <server>oracle-prod.company.com</server>
+        <database>ORCLPDB</database>
+        <port>1521</port>
+        <serviceName>ORCLPDB.company.com</serviceName>
+        <authentication>
+          <type>SQL_AUTH</type>
+          <username>${oracle_username}</username>
+          <password>${oracle_password}</password>
+        </authentication>
+        <connectionPool>
+          <maxConnections>8</maxConnections>
+          <minConnections>2</minConnections>
+          <connectionTimeout>30</connectionTimeout>
+        </connectionPool>
+        <queryTimeout>300</queryTimeout>
+      </configuration>
+    </connector>
+  </connectors>
+
+  <!-- Data Profiles -->
+  <dataProfiles>
+    <profile id="sql-server-customer-profile" type="DATABASE">
+      <name>SQL Server Customer Record</name>
+      <fields>
+        <field name="customer_id" type="INTEGER" primaryKey="true"/>
+        <field name="firstname" type="VARCHAR" length="50" required="true"/>
+        <field name="lastname" type="VARCHAR" length="50" required="true"/>
+        <field name="email" type="VARCHAR" length="100" required="true"/>
+        <field name="phone" type="VARCHAR" length="20"/>
+        <field name="address" type="VARCHAR" length="255"/>
+        <field name="city" type="VARCHAR" length="100"/>
+        <field name="state" type="VARCHAR" length="50"/>
+        <field name="zip_code" type="VARCHAR" length="10"/>
+        <field name="country" type="VARCHAR" length="50" defaultValue="USA"/>
+        <field name="date_created" type="DATETIME"/>
+        <field name="date_modified" type="DATETIME"/>
+        <field name="is_active" type="BOOLEAN" defaultValue="true"/>
+        <field name="customer_type" type="VARCHAR" length="20"/>
+        <field name="credit_limit" type="DECIMAL" precision="10" scale="2"/>
+        <field name="last_sync_date" type="DATETIME"/>
+      </fields>
+    </profile>
+
+    <profile id="oracle-customer-profile" type="DATABASE">
+      <name>Oracle Customer Record</name>
+      <fields>
+        <field name="CUST_ID" type="NUMBER" primaryKey="true"/>
+        <field name="FULL_NAME" type="VARCHAR2" length="101" required="true"/>
+        <field name="EMAIL_ADDRESS" type="VARCHAR2" length="100" required="true"/>
+        <field name="PHONE_NUMBER" type="VARCHAR2" length="20"/>
+        <field name="STREET_ADDRESS" type="VARCHAR2" length="255"/>
+        <field name="CITY_NAME" type="VARCHAR2" length="100"/>
+        <field name="STATE_PROVINCE" type="VARCHAR2" length="50"/>
+        <field name="POSTAL_CODE" type="VARCHAR2" length="10"/>
+        <field name="COUNTRY_CODE" type="VARCHAR2" length="3"/>
+        <field name="CREATION_DATE" type="DATE"/>
+        <field name="LAST_UPDATE_DATE" type="DATE"/>
+        <field name="ACTIVE_FLAG" type="CHAR" length="1"/>
+        <field name="CUSTOMER_CATEGORY" type="VARCHAR2" length="20"/>
+        <field name="CREDIT_AMOUNT" type="NUMBER" precision="10" scale="2"/>
+        <field name="SYNC_TIMESTAMP" type="TIMESTAMP"/>
+      </fields>
+    </profile>
+  </dataProfiles>
+
+  <!-- Process Steps -->
+  <processSteps>
+    <!-- Start Shape -->
+    <step id="start-step" type="START_SHAPE">
+      <name>Start DB Sync Process</name>
+      <position x="100" y="200"/>
+      <configuration>
+        <logLevel>INFO</logLevel>
+        <message>Starting SQL Server to Oracle customer synchronization</message>
+      </configuration>
+    </step>
+
+    <!-- SQL Server Query -->
+    <step id="query-sql-server" type="DATABASE_QUERY">
+      <name>Query SQL Server for Updates</name>
+      <position x="250" y="200"/>
+      <connectorRef>sql-server-source</connectorRef>
+      <configuration>
+        <operation>SELECT</operation>
+        <query>
+          <![CDATA[
+            SELECT 
+                customer_id,
+                firstname,
+                lastname,
+                email,
+                phone,
+                address,
+                city,
+                state,
+                zip_code,
+                country,
+                date_created,
+                date_modified,
+                is_active,
+                customer_type,
+                credit_limit,
+                GETDATE() as last_sync_date
+            FROM customers 
+            WHERE date_modified > ISNULL(last_sync_date, '1900-01-01')
+               OR last_sync_date IS NULL
+            ORDER BY date_modified ASC
+          ]]>
+        </query>
+        <outputProfile>sql-server-customer-profile</outputProfile>
+        <maxRows>1000</maxRows>
+      </configuration>
+      <errorHandling>
+        <onError>stop</onError>
+        <logErrors>true</logErrors>
+      </errorHandling>
+    </step>
+
+    <!-- Decision Shape - Check if records found -->
+    <step id="check-records" type="DECISION_SHAPE">
+      <name>Check for Records</name>
+      <position x="400" y="200"/>
+      <configuration>
+        <condition>
+          <expression>${document.recordCount} > 0</expression>
+        </condition>
+        <trueLabel>Records Found</trueLabel>
+        <falseLabel>No Records</falseLabel>
+      </configuration>
+    </step>
+
+    <!-- Data Mapping and Transformation -->
+    <step id="transform-data" type="DATA_MAPPING">
+      <name>Transform Customer Data</name>
+      <position x="550" y="150"/>
+      <configuration>
+        <inputProfile>sql-server-customer-profile</inputProfile>
+        <outputProfile>oracle-customer-profile</outputProfile>
+        <mappings>
+          <mapping>
+            <source>customer_id</source>
+            <destination>CUST_ID</destination>
+          </mapping>
+          <mapping>
+            <source>email</source>
+            <destination>EMAIL_ADDRESS</destination>
+            <transformation>TRIM(LOWER({email}))</transformation>
+          </mapping>
+          <mapping>
+            <source>phone</source>
+            <destination>PHONE_NUMBER</destination>
+            <transformation>REGEX_REPLACE({phone}, '[^0-9]', '')</transformation>
+          </mapping>
+          <mapping>
+            <source>address</source>
+            <destination>STREET_ADDRESS</destination>
+          </mapping>
+          <mapping>
+            <source>city</source>
+            <destination>CITY_NAME</destination>
+          </mapping>
+          <mapping>
+            <source>state</source>
+            <destination>STATE_PROVINCE</destination>
+          </mapping>
+          <mapping>
+            <source>zip_code</source>
+            <destination>POSTAL_CODE</destination>
+          </mapping>
+          <mapping>
+            <source>date_created</source>
+            <destination>CREATION_DATE</destination>
+          </mapping>
+          <mapping>
+            <source>date_modified</source>
+            <destination>LAST_UPDATE_DATE</destination>
+          </mapping>
+          <mapping>
+            <source>last_sync_date</source>
+            <destination>SYNC_TIMESTAMP</destination>
+          </mapping>
+          <!-- Custom Transformations -->
+          <mapping>
+            <destination>FULL_NAME</destination>
+            <transformation>CONCAT(TRIM({firstname}), ' ', TRIM({lastname}))</transformation>
+            <description>Combine firstname and lastname into fullname field</description>
+          </mapping>
+          <mapping>
+            <destination>COUNTRY_CODE</destination>
+            <transformation>
+              CASE 
+                WHEN UPPER({country}) = 'USA' OR UPPER({country}) = 'UNITED STATES' THEN 'US'
+                WHEN UPPER({country}) = 'CANADA' THEN 'CA'
+                WHEN UPPER({country}) = 'MEXICO' THEN 'MX'
+                ELSE 'US'
+              END
+            </transformation>
+          </mapping>
+          <mapping>
+            <destination>ACTIVE_FLAG</destination>
+            <transformation>CASE WHEN {is_active} = 1 THEN 'Y' ELSE 'N' END</transformation>
+          </mapping>
+          <mapping>
+            <source>customer_type</source>
+            <destination>CUSTOMER_CATEGORY</destination>
+            <transformation>UPPER(COALESCE({customer_type}, 'STANDARD'))</transformation>
+          </mapping>
+          <mapping>
+            <source>credit_limit</source>
+            <destination>CREDIT_AMOUNT</destination>
+            <transformation>COALESCE({credit_limit}, 0)</transformation>
+          </mapping>
+        </mappings>
+        <validations>
+          <validation field="FULL_NAME" rule="NOT_EMPTY" message="Full name cannot be empty"/>
+          <validation field="EMAIL_ADDRESS" rule="VALID_EMAIL" message="Invalid email format"/>
+          <validation field="CUST_ID" rule="NOT_NULL" message="Customer ID is required"/>
+        </validations>
+      </configuration>
+    </step>
+
+    <!-- Oracle Database Insert/Update -->
+    <step id="upsert-oracle" type="DATABASE_UPSERT">
+      <name>Upsert to Oracle Database</name>
+      <position x="700" y="150"/>
+      <connectorRef>oracle-destination</connectorRef>
+      <configuration>
+        <operation>UPSERT</operation>
+        <table>CUSTOMERS</table>
+        <inputProfile>oracle-customer-profile</inputProfile>
+        <keyFields>
+          <field>CUST_ID</field>
+        </keyFields>
+        <updateFields>
+          <field>FULL_NAME</field>
+          <field>EMAIL_ADDRESS</field>
+          <field>PHONE_NUMBER</field>
+          <field>STREET_ADDRESS</field>
+          <field>CITY_NAME</field>
+          <field>STATE_PROVINCE</field>
+          <field>POSTAL_CODE</field>
+          <field>COUNTRY_CODE</field>
+          <field>LAST_UPDATE_DATE</field>
+          <field>ACTIVE_FLAG</field>
+          <field>CUSTOMER_CATEGORY</field>
+          <field>CREDIT_AMOUNT</field>
+          <field>SYNC_TIMESTAMP</field>
+        </updateFields>
+        <insertFields>all</insertFields>
+        <batchSize>100</batchSize>
+        <commitInterval>100</commitInterval>
+      </configuration>
+      <errorHandling>
+        <onError>continue</onError>
+        <logErrors>true</logErrors>
+        <deadLetterQueue>oracle-sync-errors</deadLetterQueue>
+      </errorHandling>
+    </step>
+
+    <!-- Update SQL Server Sync Timestamp -->
+    <step id="update-sync-timestamp" type="DATABASE_UPDATE">
+      <name>Update Sync Timestamp</name>
+      <position x="850" y="150"/>
+      <connectorRef>sql-server-source</connectorRef>
+      <configuration>
+        <operation>UPDATE</operation>
+        <query>
+          <![CDATA[
+            UPDATE customers 
+            SET last_sync_date = GETDATE() 
+            WHERE customer_id IN (${processedCustomerIds})
+          ]]>
+        </query>
+        <parameters>
+          <parameter name="processedCustomerIds" source="CUST_ID" type="INTEGER_LIST"/>
+        </parameters>
+      </configuration>
+    </step>
+
+    <!-- Success Notification -->
+    <step id="log-success" type="NOTIFICATION">
+      <name>Log Success</name>
+      <position x="1000" y="150"/>
+      <configuration>
+        <type>LOG</type>
+        <level>INFO</level>
+        <message>
+          Successfully synchronized ${document.recordCount} customer records from SQL Server to Oracle.
+          Process completed at ${currentDateTime}.
+        </message>
+        <includeProcessData>true</includeProcessData>
+      </configuration>
+    </step>
+
+    <!-- No Records Path -->
+    <step id="log-no-records" type="NOTIFICATION">
+      <name>Log No Records</name>
+      <position x="550" y="300"/>
+      <configuration>
+        <type>LOG</type>
+        <level>INFO</level>
+        <message>
+          No new or updated customer records found for synchronization at ${currentDateTime}.
+        </message>
+      </configuration>
+    </step>
+
+    <!-- Error Handler -->
+    <step id="error-handler" type="ERROR_HANDLER">
+      <name>Handle Sync Errors</name>
+      <position x="700" y="350"/>
+      <configuration>
+        <errorTypes>
+          <errorType>DATABASE_CONNECTION_ERROR</errorType>
+          <errorType>DATA_VALIDATION_ERROR</errorType>
+          <errorType>TRANSFORMATION_ERROR</errorType>
+        </errorTypes>
+        <actions>
+          <action type="LOG_ERROR"/>
+          <action type="SEND_NOTIFICATION">
+            <recipients>
+              <email>integration-team@company.com</email>
+            </recipients>
+            <subject>SQL Server to Oracle Sync Failed</subject>
+            <message>
+              Customer synchronization process failed with error: ${errorMessage}
+              Process ID: ${processId}
+              Timestamp: ${currentDateTime}
+              Error Details: ${errorDetails}
+            </message>
+          </action>
+          <action type="RETRY">
+            <maxRetries>3</maxRetries>
+            <retryInterval>300</retryInterval>
+          </action>
+        </actions>
+      </configuration>
+    </step>
+
+    <!-- End Shape -->
+    <step id="end-step" type="END_SHAPE">
+      <name>End DB Sync Process</name>
+      <position x="1150" y="200"/>
+      <configuration>
+        <logLevel>INFO</logLevel>
+        <message>SQL Server to Oracle customer synchronization process completed</message>
+      </configuration>
+    </step>
+  </processSteps>
+
+  <!-- Process Flow Connections -->
+  <processFlow>
+    <connection from="start-step" to="query-sql-server"/>
+    <connection from="query-sql-server" to="check-records"/>
+    <connection from="check-records" to="transform-data" condition="true"/>
+    <connection from="check-records" to="log-no-records" condition="false"/>
+    <connection from="transform-data" to="upsert-oracle"/>
+    <connection from="upsert-oracle" to="update-sync-timestamp"/>
+    <connection from="update-sync-timestamp" to="log-success"/>
+    <connection from="log-success" to="end-step"/>
+    <connection from="log-no-records" to="end-step"/>
+    
+    <!-- Error Flow Connections -->
+    <connection from="query-sql-server" to="error-handler" condition="error"/>
+    <connection from="transform-data" to="error-handler" condition="error"/>
+    <connection from="upsert-oracle" to="error-handler" condition="error"/>
+    <connection from="update-sync-timestamp" to="error-handler" condition="error"/>
+    <connection from="error-handler" to="end-step"/>
+  </processFlow>
+
+  <!-- Process Variables -->
+  <processVariables>
+    <variable name="sql_username" type="STRING" encrypted="true" description="SQL Server authentication username"/>
+    <variable name="sql_password" type="STRING" encrypted="true" description="SQL Server authentication password"/>
+    <variable name="oracle_username" type="STRING" encrypted="true" description="Oracle database username"/>
+    <variable name="oracle_password" type="STRING" encrypted="true" description="Oracle database password"/>
+    <variable name="processedCustomerIds" type="INTEGER_LIST" description="List of customer IDs processed in current batch"/>
+    <variable name="currentDateTime" type="DATETIME" description="Current process execution timestamp"/>
+  </processVariables>
+
+  <!-- Process Metadata -->
+  <processMetadata>
+    <version>1.0.0</version>
+    <author>Integration Team</author>
+    <createdDate>2024-01-15</createdDate>
+    <lastModified>2024-01-15</lastModified>
+    <tags>
+      <tag>database</tag>
+      <tag>customer-sync</tag>
+      <tag>sql-server</tag>
+      <tag>oracle</tag>
+      <tag>data-transformation</tag>
+    </tags>
+    <documentation>
+      This process synchronizes customer records from SQL Server to Oracle database
+      with data transformation including firstname/lastname combination into fullname.
+      The process includes error handling, data validation, and audit logging.
+    </documentation>
+  </processMetadata>
+
+</process>
