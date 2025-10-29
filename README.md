@@ -2,7 +2,7 @@
 This repo support Microsoft workshops showing how to use GitHub Copilot / Coding Agent to migrate Integration Workflows to Azure Integration Services (AIS)
 
 # Instructions
-Clone this repo then follow these steps to create a plan and POC for migrating a simple systems integration from Boomi to AIS using the .bpr file from Boomi integration. Alternatively follow the steps using the example.bpr file in this repo to see how a SQL<Boomi>Oracle integration would look in AIS.
+Fork this repo (fork not clone as we will work in the browser with Coding agent) then follow these steps to create a plan and POC for migrating a simple systems integration from Boomi to AIS using the .bpr file from Boomi integration. Alternatively follow the steps using the example.bpr file in this repo to see how a SQL<Boomi>Oracle integration would look in AIS.
 
 - Step 1: Add your .bpr file
 - Step 2: Copy the text in the Prompts/1_Plan file to use as the instruction for GitHub Coding Agent (Copilot)
